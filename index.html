@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Subnet Calculator - Portable</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+
+        // --- UTILS ---
+        function ipToLong(ip) {
+            return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+        }
+
+        function longToIp(long) {
+            return [
+                (long >>> 24) & 0xff,
+                (long >>> 16) & 0xff,
+                (long >>> 8) & 0xff,
+                long & 0xff
+            ].join('.');
+        }
+
+        function calculateSubnet(ip, cidr) {
+            try {
+                const ipLong = ipToLong(ip);
+                const maskLong = (0xffffffff << (32 - cidr)) >>> 0;
+                const networkLong = (ipLong & maskLong) >>> 0;
+                const wildcardLong = (~maskLong) >>> 0;
+                const broadcastLong = (networkLong | wildcardLong) >>> 0;
+
+                const usableHosts = cidr >= 31 ? 0 : (broadcastLong - networkLong - 1);
+                const totalHosts = Math.pow(2, 32 - cidr);
+
+                return {
+                    ipAddress: ip,
+                    cidr,
+                    networkAddress: longToIp(networkLong),
+                    broadcastAddress: longToIp(broadcastLong),
+                    subnetMask: longToIp(maskLong),
+                    wildcardMask: longToIp(wildcardLong),
+                    firstHost: cidr >= 31 ? 'N/A' : longToIp(networkLong + 1),
+                    lastHost: cidr >= 31 ? 'N/A' : longToIp(broadcastLong - 1),
+                    totalHosts,
+                    usableHosts: usableHosts < 0 ? 0 : usableHosts,
+                };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function isValidIp(ip) {
+            const parts = ip.split('.');
+            if (parts.length !== 4) return false;
+            return parts.every(p => {
+                const n = parseInt(p, 10);
+                return !isNaN(n) && n >= 0 && n <= 255 && p === n.toString();
+            });
+        }
+
+        // --- COMPONENTS ---
+        function Icon({ name, className }) {
+            useEffect(() => {
+                lucide.createIcons();
+            }, [name]);
+            return <i data-lucide={name} className={className}></i>;
+        }
+
+        function ResultCard({ label, value, iconName, iconColor, subValue }) {
+            return (
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 mb-3">
+                        <Icon name={iconName} className={`w-5 h-5 ${iconColor}`} />
+                        <span className="text-sm font-bold text-slate-500 tracking-tight">{label}</span>
+                    </div>
+                    <p className="text-2xl font-mono font-bold text-slate-900 mb-1">{value}</p>
+                    {subValue && <p className="text-xs font-medium text-slate-400">{subValue}</p>}
+                </div>
+            );
+        }
+
+        const CIDR_OPTIONS = Array.from({ length: 33 }, (_, i) => i);
+
+        function App() {
+            const [ipInput, setIpInput] = useState('192.168.1.1');
+            const [cidrInput, setCidrInput] = useState(24);
+            const [error, setError] = useState(null);
+
+            const subnetInfo = useMemo(() => {
+                if (!isValidIp(ipInput)) {
+                    setError('Μη έγκυρη διεύθυνση IP');
+                    return null;
+                }
+                setError(null);
+                return calculateSubnet(ipInput, cidrInput);
+            }, [ipInput, cidrInput]);
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Header */}
+                    <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10">
+                        <div className="max-w-6xl mx-auto flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-indigo-600 p-2 rounded-lg">
+                                    <Icon name="network" className="text-white w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-bold text-slate-900 tracking-tight">Προσομοιωτής Υποδικτύωσης</h1>
+                                </div>
+                            </div>
+                            <div className="hidden md:flex items-center gap-4 text-sm font-medium text-slate-600">
+                                <span className="flex items-center gap-1.5"><Icon name="globe" className="w-4 h-4" /> IPv4</span>
+                                <span className="flex items-center gap-1.5"><Icon name="hash" className="w-4 h-4" /> CIDR Notation</span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 max-w-6xl mx-auto w-full p-6 space-y-8">
+                        {/* Input Section */}
+                        <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
+                                <div className="md:col-span-7 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700 ml-1">Διεύθυνση IP</label>
+                                    <div className="relative">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                                            <Icon name="search" className="w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={ipInput}
+                                            onChange={(e) => setIpInput(e.target.value)}
+                                            placeholder="π.χ. 192.168.1.1"
+                                            className={`w-full pl-12 pr-4 py-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none text-lg font-mono ${
+                                                error ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                                            }`}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="md:col-span-5 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700 ml-1">Μάσκα Υποδικτύου (CIDR)</label>
+                                    <select
+                                        value={cidrInput}
+                                        onChange={(e) => setCidrInput(parseInt(e.target.value))}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none text-lg font-mono cursor-pointer"
+                                    >
+                                        {CIDR_OPTIONS.map(c => (
+                                            <option key={c} value={c}>/{c} — {calculateSubnet('0.0.0.0', c)?.subnetMask}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            {error && (
+                                <p className="mt-4 text-sm text-red-600 font-medium flex items-center gap-1.5">
+                                    <Icon name="info" className="w-4 h-4" /> {error}
+                                </p>
+                            )}
+                        </section>
+
+                        {subnetInfo && (
+                            <div className="space-y-8">
+                                {/* Results Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <ResultCard 
+                                        label="Διεύθυνση Δικτύου" 
+                                        value={subnetInfo.networkAddress} 
+                                        iconName="network"
+                                        iconColor="text-indigo-500"
+                                        subValue={`CIDR: /${subnetInfo.cidr}`}
+                                    />
+                                    <ResultCard 
+                                        label="Διεύθυνση Broadcast" 
+                                        value={subnetInfo.broadcastAddress} 
+                                        iconName="globe"
+                                        iconColor="text-rose-500"
+                                        subValue="Τελευταία διεύθυνση στο εύρος"
+                                    />
+                                    <ResultCard 
+                                        label="Διαθέσιμοι Hosts" 
+                                        value={subnetInfo.usableHosts.toLocaleString()} 
+                                        iconName="users"
+                                        iconColor="text-emerald-500"
+                                        subValue={`Σύνολο: ${subnetInfo.totalHosts.toLocaleString()}`}
+                                    />
+                                    <ResultCard 
+                                        label="Μάσκα Υποδικτύου" 
+                                        value={subnetInfo.subnetMask} 
+                                        iconName="layout-grid"
+                                        iconColor="text-amber-500"
+                                        subValue={`Wildcard: ${subnetInfo.wildcardMask}`}
+                                    />
+                                </div>
+
+                                {/* Host Range */}
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                            <Icon name="arrow-right" className="w-5 h-5 text-indigo-500" />
+                                            Εύρος Διευθύνσεων Host
+                                        </h3>
+                                    </div>
+                                    <div className="p-6 md:p-8 flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16">
+                                        <div className="text-center space-y-1">
+                                            <p className="text-xs font-bold text-slate-400 tracking-tight">Πρώτος Διαθέσιμος Host</p>
+                                            <p className="text-3xl font-mono font-bold text-slate-900">{subnetInfo.firstHost}</p>
+                                        </div>
+                                        <div className="hidden md:block h-px w-24 bg-slate-200 relative">
+                                            <div className="absolute -right-2 -top-2 text-slate-300">
+                                                <Icon name="chevron-right" className="w-5 h-5" />
+                                            </div>
+                                        </div>
+                                        <div className="text-center space-y-1">
+                                            <p className="text-xs font-bold text-slate-400 tracking-tight">Τελευταίος Διαθέσιμος Host</p>
+                                            <p className="text-3xl font-mono font-bold text-slate-900">{subnetInfo.lastHost}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

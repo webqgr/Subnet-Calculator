@@ -43,6 +43,17 @@
             ].join('.');
         }
 
+        function calculateSubnets(cidr, ip) {
+            const firstOctet = parseInt(ip.split('.')[0], 10);
+            let baseCidr = 24;
+            if (firstOctet >= 1 && firstOctet <= 126) baseCidr = 8;
+            else if (firstOctet >= 128 && firstOctet <= 191) baseCidr = 16;
+            else if (firstOctet >= 192 && firstOctet <= 223) baseCidr = 24;
+
+            if (cidr < baseCidr) return 1;
+            return Math.pow(2, cidr - baseCidr);
+        }
+
         function calculateSubnet(ip, cidr) {
             try {
                 const ipLong = ipToLong(ip);
@@ -181,7 +192,7 @@
                         {subnetInfo && (
                             <div className="space-y-8">
                                 {/* Results Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                                     <ResultCard 
                                         label="Διεύθυνση Δικτύου" 
                                         value={subnetInfo.networkAddress} 
@@ -197,18 +208,18 @@
                                         subValue="Τελευταία διεύθυνση στο εύρος"
                                     />
                                     <ResultCard 
-                                        label="Διαθέσιμοι Hosts" 
-                                        value={subnetInfo.usableHosts.toLocaleString()} 
-                                        iconName="users"
-                                        iconColor="text-emerald-500"
-                                        subValue={`Σύνολο: ${subnetInfo.totalHosts.toLocaleString()}`}
-                                    />
-                                    <ResultCard 
                                         label="Μάσκα Υποδικτύου" 
                                         value={subnetInfo.subnetMask} 
                                         iconName="layout-grid"
                                         iconColor="text-amber-500"
                                         subValue={`Wildcard: ${subnetInfo.wildcardMask}`}
+                                    />
+                                    <ResultCard 
+                                        label="Διαθέσιμοι Hosts" 
+                                        value={subnetInfo.usableHosts.toLocaleString()} 
+                                        iconName="users"
+                                        iconColor="text-emerald-500"
+                                        subValue={`Σύνολο: ${subnetInfo.totalHosts.toLocaleString()}`}
                                     />
                                 </div>
 
